@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cadastro de médicas · CegonhIA</title>
+  <link rel="icon" href="icone.png">
+  <link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+<header>
+  <div class="caixa">
+    <img src="icone.png" alt="">
+    <div>
+      <h1>Cadastro de médicas</h1>
+      <p>CegonhIA · Galenus Tecnologia Ltda</p>
+    </div>
+  </div>
+</header>
+<main class="caixa">
+  <div id="formulario">
+    <p>O CegonhIA é usado por médicas e médicos com registro ativo no Conselho Regional de Medicina.
+    Preencha os dados abaixo: conferimos o seu CRM na consulta pública do Conselho Federal de Medicina
+    e, com tudo certo, enviamos um e-mail para você criar a senha e entrar no app.</p>
+
+    <form id="pedido" novalidate>
+      <label for="nome">Nome completo</label>
+      <input id="nome" name="nome" autocomplete="name" required minlength="3" maxlength="120">
+
+      <label for="email">E-mail</label>
+      <input id="email" name="email" type="email" autocomplete="email" required maxlength="254">
+      <p class="suave">É com ele que você vai entrar no app. Use um e-mail que ainda não tenha conta no CegonhIA.</p>
+
+      <div class="linha">
+        <div>
+          <label for="crm">Número do CRM</label>
+          <input id="crm" name="crm" inputmode="numeric" required maxlength="9">
+        </div>
+        <div class="curto">
+          <label for="uf">UF</label>
+          <select id="uf" name="uf" required><option value=""></option></select>
+        </div>
+      </div>
+
+      <label class="aceite" for="termos">
+        <input id="termos" type="checkbox" required>
+        <span>Li a <a href="privacidade.html" target="_blank" rel="noopener">Política de Privacidade</a>
+        e autorizo a Galenus a conferir o meu registro no CFM.</span>
+      </label>
+
+      <p id="erro" class="erro" role="alert" hidden></p>
+      <div class="acoes"><button id="enviar" type="submit">Pedir cadastro</button></div>
+    </form>
+  </div>
+
+  <div id="enviado" class="cartao aviso" hidden>
+    <strong>Pedido recebido.</strong>
+    <p>Vamos conferir o seu CRM e responder pelo e-mail informado, normalmente em até 2 dias úteis.
+    Se o pedido for aprovado, você recebe um link para criar a senha.</p>
+    <p class="suave">Se você já tem cadastro ou um pedido em análise, não é preciso enviar de novo.</p>
+  </div>
+</main>
+<footer>
+  <div class="caixa">Galenus Tecnologia Ltda · CNPJ 64.354.786/0001-28 · Aracaju/SE ·
+  <a href="mailto:contato@galenus.com.br">contato@galenus.com.br</a></div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+  const UFS = 'AC AL AP AM BA CE DF ES GO MA MT MS MG PA PB PR PE PI RJ RN RS RO RR SC SP SE TO'.split(' ');
+  const uf = document.getElementById('uf');
+  for (const sigla of UFS) uf.add(new Option(sigla, sigla));
+
+  const banco = supabase.createClient(CEGONHIA.url, CEGONHIA.chave, { auth: { persistSession: false } });
+  const erro = document.getElementById('erro');
+  const botao = document.getElementById('enviar');
+  const mostrarErro = (texto) => { erro.textContent = texto; erro.hidden = false; };
+
+  document.getElementById('pedido').addEventListener('submit', async (evento) => {
+    evento.preventDefault();
+    erro.hidden = true;
+    const nome = document.getElementById('nome').value.trim();
+    const email = document.getElementById('email').value.trim();
+    const crm = document.getElementById('crm').value.replace(/\D/g, '');
+    if (nome.length < 3) return mostrarErro('Informe o seu nome completo.');
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return mostrarErro('Informe um e-mail válido.');
+    if (!crm) return mostrarErro('Informe o número do CRM.');
+    if (!uf.value) return mostrarErro('Informe a UF do CRM.');
+    if (!document.getElementById('termos').checked) {
+      return mostrarErro('Marque a caixa da Política de Privacidade para continuar.');
+    }
+
+    botao.disabled = true;
+    const { error } = await banco.rpc('pedir_cadastro_medica',
+      { p_nome: nome, p_email: email, p_crm: crm, p_crm_uf: uf.value });
+    botao.disabled = false;
+    if (error) {
+      // Mensagens de validação do banco vêm prontas (código P0001); o resto é falha nossa.
+      return mostrarErro(error.code === 'P0001' ? error.message
+        : 'Não foi possível enviar agora. Tente de novo em instantes.');
+    }
+    document.getElementById('formulario').hidden = true;
+    document.getElementById('enviado').hidden = false;
+  });
+</script>
+</body>
+</html>

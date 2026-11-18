@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Criar senha · CegonhIA</title>
+  <link rel="icon" href="icone.png">
+  <link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+<header>
+  <div class="caixa">
+    <img src="icone.png" alt="">
+    <div>
+      <h1>Criar a sua senha</h1>
+      <p>CegonhIA · Galenus Tecnologia Ltda</p>
+    </div>
+  </div>
+</header>
+<main class="caixa">
+  <p id="carregando">Conferindo o seu convite…</p>
+
+  <div id="invalido" class="cartao aviso" hidden>
+    <strong>Este link não vale mais.</strong>
+    <p>O link do convite só funciona uma vez e por tempo limitado. Escreva para
+    <a href="mailto:contato@galenus.com.br">contato@galenus.com.br</a> que enviamos outro.</p>
+  </div>
+
+  <form id="senha" hidden novalidate>
+    <p>Seu cadastro foi aprovado. Crie a senha que você vai usar para entrar no app com o e-mail
+    <strong id="email"></strong>.</p>
+    <label for="nova">Senha</label>
+    <input id="nova" type="password" autocomplete="new-password" required minlength="8">
+    <label for="repetir">Repita a senha</label>
+    <input id="repetir" type="password" autocomplete="new-password" required minlength="8">
+    <p class="suave">Pelo menos 8 caracteres.</p>
+    <p id="erro" class="erro" role="alert" hidden></p>
+    <div class="acoes"><button id="salvar" type="submit">Salvar senha</button></div>
+  </form>
+
+  <div id="pronto" class="cartao aviso" hidden>
+    <strong>Senha criada.</strong>
+    <p>Agora abra o app <strong>CegonhIA</strong> no celular e entre com o seu e-mail e a senha que
+    acabou de criar.</p>
+  </div>
+</main>
+<footer>
+  <div class="caixa">Galenus Tecnologia Ltda · CNPJ 64.354.786/0001-28 · Aracaju/SE ·
+  <a href="mailto:contato@galenus.com.br">contato@galenus.com.br</a></div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+  // O link do convite traz a sessão no endereço; ela fica só nesta aba.
+  const banco = supabase.createClient(CEGONHIA.url, CEGONHIA.chave, {
+    auth: { persistSession: false, detectSessionInUrl: true },
+  });
+  const mostrar = (id) => {
+    for (const outro of ['carregando', 'invalido', 'senha', 'pronto']) {
+      document.getElementById(outro).hidden = outro !== id;
+    }
+  };
+  const erro = document.getElementById('erro');
+  const mostrarErro = (texto) => { erro.textContent = texto; erro.hidden = false; };
+
+  let decidido = false;
+  const comSessao = (sessao) => {
+    if (decidido || !sessao) return;
+    decidido = true;
+    document.getElementById('email').textContent = sessao.user.email;
+    history.replaceState(null, '', location.pathname);   // tira o token do endereço
+    mostrar('senha');
+  };
+  banco.auth.onAuthStateChange((_evento, sessao) => comSessao(sessao));
+  banco.auth.getSession().then(({ data }) => comSessao(data.session));
+  setTimeout(() => { if (!decidido) { decidido = true; mostrar('invalido'); } }, 6000);
+
+  document.getElementById('senha').addEventListener('submit', async (evento) => {
+    evento.preventDefault();
+    erro.hidden = true;
+    const nova = document.getElementById('nova').value;
+    if (nova.length < 8) return mostrarErro('A senha precisa ter pelo menos 8 caracteres.');
+    if (nova !== document.getElementById('repetir').value) return mostrarErro('As senhas não são iguais.');
+
+    const botao = document.getElementById('salvar');
+    botao.disabled = true;
+    const { error } = await banco.auth.updateUser({ password: nova });
+    botao.disabled = false;
+    if (error) return mostrarErro('Não foi possível salvar a senha. Tente de novo ou peça um novo convite.');
+    await banco.auth.signOut();
+    mostrar('pronto');
+  });
+</script>
+</body>
+</html>

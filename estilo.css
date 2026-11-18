@@ -51,3 +51,39 @@ th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--bor
 th { color: var(--vinho); }
 .tabela { overflow-x: auto; }
 footer { color: var(--suave); font-size: 0.9rem; border-top: 1px solid var(--borda); padding: 24px 16px; }
+
+/* Formulários (cadastro de médica, senha e painel) */
+label { display: block; margin: 16px 0 4px; font-weight: 600; }
+input, select, textarea {
+  width: 100%;
+  padding: 12px 14px;
+  font: inherit;
+  color: var(--texto);
+  background: var(--cartao);
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+}
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--rosa); outline-offset: 1px; }
+.linha { display: flex; gap: 12px; }
+.linha > div { flex: 1; }
+.linha > .curto { flex: 0 0 110px; }
+.aceite { display: flex; gap: 10px; align-items: flex-start; font-weight: 400; }
+.aceite input { width: auto; margin-top: 6px; }
+button {
+  font: inherit;
+  font-weight: 600;
+  padding: 12px 20px;
+  border-radius: 999px;
+  border: 1px solid var(--rosa);
+  background: var(--rosa);
+  color: #fff;
+  cursor: pointer;
+}
+button.secundario { background: transparent; color: var(--rosa); }
+button:disabled { opacity: 0.5; cursor: default; }
+.acoes { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 20px; }
+.aviso { border-left: 4px solid var(--rosa); }
+.erro { color: #b3261e; }
+@media (prefers-color-scheme: dark) { .erro { color: #f2b8b5; } }
+.suave { color: var(--suave); font-size: 0.95rem; }
+[hidden] { display: none !important; }

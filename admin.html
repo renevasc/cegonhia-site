@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Painel · CegonhIA</title>
+  <link rel="icon" href="icone.png">
+  <link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+<header>
+  <div class="caixa">
+    <img src="icone.png" alt="">
+    <div>
+      <h1>Pedidos de cadastro</h1>
+      <p>Painel da Galenus · uso interno</p>
+    </div>
+  </div>
+</header>
+<main class="caixa">
+  <form id="login" hidden novalidate>
+    <p>Entre com a conta de administrador.</p>
+    <label for="email">E-mail</label>
+    <input id="email" type="email" autocomplete="username" required>
+    <label for="senha">Senha</label>
+    <input id="senha" type="password" autocomplete="current-password" required>
+    <p id="erro-login" class="erro" role="alert" hidden></p>
+    <div class="acoes"><button type="submit">Entrar</button></div>
+  </form>
+
+  <div id="painel" hidden>
+    <div class="acoes" style="margin-top:0">
+      <button id="atualizar" class="secundario" type="button">Atualizar</button>
+      <button id="sair" class="secundario" type="button">Sair</button>
+    </div>
+    <p id="erro" class="erro" role="alert" hidden></p>
+
+    <h2>Pendentes <span id="quantos" class="suave"></span></h2>
+    <p class="suave">Antes de aprovar, abra a busca do CFM e confira nome, número, UF e situação
+    <strong>regular</strong>. Aprovar envia na hora o e-mail para a médica criar a senha.</p>
+    <div id="pendentes"></div>
+
+    <h2>Decididos recentemente</h2>
+    <div class="tabela"><table>
+      <thead><tr><th>Médica</th><th>CRM</th><th>Decisão</th><th>Quando</th></tr></thead>
+      <tbody id="decididos"></tbody>
+    </table></div>
+  </div>
+</main>
+<footer>
+  <div class="caixa">Galenus Tecnologia Ltda · CNPJ 64.354.786/0001-28</div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+  // A sessão fica só na aba: fechou, saiu.
+  const banco = supabase.createClient(CEGONHIA.url, CEGONHIA.chave, {
+    auth: { storage: window.sessionStorage, detectSessionInUrl: false },
+  });
+  const el = (id) => document.getElementById(id);
+  // Todo texto vindo do banco entra por textContent: os pedidos são escritos por anônimos.
+  const criar = (tag, texto, classe) => {
+    const no = document.createElement(tag);
+    if (texto != null) no.textContent = texto;
+    if (classe) no.className = classe;
+    return no;
+  };
+  const dataHora = (iso) => new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+  const mostrarErro = (texto) => { el('erro').textContent = texto; el('erro').hidden = !texto; };
+
+  async function decidir(pedido, decisao, motivo, botoes) {
+    botoes.forEach((b) => (b.disabled = true));
+    mostrarErro('');
+    const { error } = await banco.functions.invoke('aprovar-medica',
+      { body: { pedido_id: pedido.id, decisao, motivo } });
+    if (error) {
+      let texto = 'Não foi possível registrar a decisão.';
+      try { texto = (await error.context.json()).erro ?? texto; } catch (_) { /* sem corpo */ }
+      mostrarErro(texto);
+      botoes.forEach((b) => (b.disabled = false));
+      return;
+    }
+    await carregar();
+  }
+
+  function cartaoDoPedido(p) {
+    const cartao = criar('div', null, 'cartao');
+    cartao.append(criar('strong', p.nome));
+    cartao.append(criar('div', `CRM ${p.crm}/${p.crm_uf} · ${p.email}`));
+    cartao.append(criar('div', `Pedido em ${dataHora(p.criado_em)}`, 'suave'));
+
+    const cfm = criar('a', 'Abrir a busca de médicos do CFM');
+    cfm.href = 'https://portal.cfm.org.br/busca-medicos';
+    cfm.target = '_blank';
+    cfm.rel = 'noopener';
+    const linha = criar('p');
+    linha.append(cfm);
+    cartao.append(linha);
+
+    const aprovar = criar('button', 'CRM conferido: aprovar');
+    const recusar = criar('button', 'Recusar', 'secundario');
+    aprovar.type = recusar.type = 'button';
+    aprovar.onclick = () => {
+      if (confirm(`Você conferiu no CFM o CRM ${p.crm}/${p.crm_uf} de ${p.nome}?\n\nAo confirmar, ela recebe o e-mail para criar a senha.`)) {
+        decidir(p, 'aprovar', undefined, [aprovar, recusar]);
+      }
+    };
+    recusar.onclick = () => {
+      const motivo = prompt('Motivo da recusa (fica registrado; a médica não é avisada automaticamente):');
+      if (motivo !== null) decidir(p, 'recusar', motivo, [aprovar, recusar]);
+    };
+    const acoes = criar('div', null, 'acoes');
+    acoes.append(aprovar, recusar);
+    cartao.append(acoes);
+    return cartao;
+  }
+
+  async function carregar() {
+    mostrarErro('');
+    const { data, error } = await banco.from('pedidos_medica')
+      .select('id, nome, email, crm, crm_uf, status, criado_em, decidido_em, motivo')
+      .order('criado_em', { ascending: false }).limit(200);
+    if (error) return mostrarErro('Não foi possível carregar os pedidos.');
+
+    const pendentes = data.filter((p) => p.status === 'pendente').reverse();   // mais antigos primeiro
+    el('quantos').textContent = `(${pendentes.length})`;
+    el('pendentes').replaceChildren(...(pendentes.length
+      ? pendentes.map(cartaoDoPedido)
+      : [criar('p', 'Nenhum pedido aguardando.', 'suave')]));
+
+    el('decididos').replaceChildren(...data.filter((p) => p.status !== 'pendente').slice(0, 30).map((p) => {
+      const tr = criar('tr');
+      tr.append(
+        criar('td', `${p.nome} (${p.email})`),
+        criar('td', `${p.crm}/${p.crm_uf}`),
+        criar('td', p.status === 'aprovado' ? 'Aprovado' : `Recusado${p.motivo ? ': ' + p.motivo : ''}`),
+        criar('td', p.decidido_em ? dataHora(p.decidido_em) : ''),
+      );
+      return tr;
+    }));
+  }
+
+  async function abrir(sessao) {
+    el('login').hidden = !!sessao;
+    el('painel').hidden = !sessao;
+    if (!sessao) return;
+    const { data: admin } = await banco.rpc('eh_admin');
+    if (!admin) {
+      await banco.auth.signOut();
+      el('login').hidden = false;
+      el('painel').hidden = true;
+      el('erro-login').textContent = 'Esta conta não é de administrador.';
+      el('erro-login').hidden = false;
+      return;
+    }
+    await carregar();
+  }
+
+  el('login').addEventListener('submit', async (evento) => {
+    evento.preventDefault();
+    el('erro-login').hidden = true;
+    const { data, error } = await banco.auth.signInWithPassword(
+      { email: el('email').value.trim(), password: el('senha').value });
+    el('senha').value = '';
+    if (error) {
+      el('erro-login').textContent = 'E-mail ou senha incorretos.';
+      el('erro-login').hidden = false;
+      return;
+    }
+    abrir(data.session);
+  });
+  el('atualizar').onclick = carregar;
+  el('sair').onclick = async () => { await banco.auth.signOut(); abrir(null); };
+  banco.auth.getSession().then(({ data }) => abrir(data.session));
+</script>
+</body>
+</html>

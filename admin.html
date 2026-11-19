@@ -73,12 +73,18 @@
   async function decidir(pedido, decisao, motivo, botoes) {
     botoes.forEach((b) => (b.disabled = true));
     mostrarErro('');
-    const { error } = await banco.functions.invoke('aprovar-medica',
-      { body: { pedido_id: pedido.id, decisao, motivo } });
+    let error;
+    try {
+      ({ error } = await banco.functions.invoke('aprovar-medica',
+        { body: { pedido_id: pedido.id, decisao, motivo } }));
+    } catch (e) {
+      error = e;
+    }
     if (error) {
-      let texto = 'Não foi possível registrar a decisão.';
+      let texto = 'Não foi possível registrar a decisão. Confira a conexão e tente de novo.';
       try { texto = (await error.context.json()).erro ?? texto; } catch (_) { /* sem corpo */ }
       mostrarErro(texto);
+      el('erro').scrollIntoView({ block: 'center' });
       botoes.forEach((b) => (b.disabled = false));
       return;
     }
@@ -99,21 +105,49 @@
     linha.append(cfm);
     cartao.append(linha);
 
+    // Confirmação na própria página: caixas nativas (confirm/prompt) são
+    // bloqueadas por alguns navegadores e o clique parecia não fazer nada.
     const aprovar = criar('button', 'CRM conferido: aprovar');
     const recusar = criar('button', 'Recusar', 'secundario');
     aprovar.type = recusar.type = 'button';
-    aprovar.onclick = () => {
-      if (confirm(`Você conferiu no CFM o CRM ${p.crm}/${p.crm_uf} de ${p.nome}?\n\nAo confirmar, ela recebe o e-mail para criar a senha.`)) {
-        decidir(p, 'aprovar', undefined, [aprovar, recusar]);
-      }
-    };
-    recusar.onclick = () => {
-      const motivo = prompt('Motivo da recusa (fica registrado; a médica não é avisada automaticamente):');
-      if (motivo !== null) decidir(p, 'recusar', motivo, [aprovar, recusar]);
-    };
     const acoes = criar('div', null, 'acoes');
     acoes.append(aprovar, recusar);
-    cartao.append(acoes);
+
+    const confirmacao = criar('div', null, 'cartao aviso');
+    confirmacao.hidden = true;
+    const pergunta = criar('p');
+    const rotuloMotivo = criar('label', 'Motivo da recusa (fica registrado; a médica não é avisada automaticamente)');
+    const motivo = criar('textarea');
+    motivo.rows = 2;
+    motivo.maxLength = 500;
+    rotuloMotivo.append(motivo);
+    const confirmar = criar('button', 'Confirmar');
+    const voltar = criar('button', 'Voltar', 'secundario');
+    confirmar.type = voltar.type = 'button';
+    const acoesConfirmacao = criar('div', null, 'acoes');
+    acoesConfirmacao.append(confirmar, voltar);
+    confirmacao.append(pergunta, rotuloMotivo, acoesConfirmacao);
+
+    let decisao = null;
+    const perguntar = (qual) => {
+      decisao = qual;
+      pergunta.textContent = qual === 'aprovar'
+        ? `Você conferiu no CFM o CRM ${p.crm}/${p.crm_uf} de ${p.nome}? Ao confirmar, ela recebe o e-mail para criar a senha.`
+        : `Recusar o pedido de ${p.nome}?`;
+      rotuloMotivo.hidden = qual !== 'recusar';
+      confirmar.textContent = qual === 'aprovar' ? 'Sim, aprovar e enviar o convite' : 'Sim, recusar';
+      acoes.hidden = true;
+      confirmacao.hidden = false;
+    };
+    aprovar.onclick = () => perguntar('aprovar');
+    recusar.onclick = () => perguntar('recusar');
+    voltar.onclick = () => { confirmacao.hidden = true; acoes.hidden = false; };
+    confirmar.onclick = () => {
+      confirmar.textContent = 'Enviando…';
+      decidir(p, decisao, decisao === 'recusar' ? motivo.value : undefined, [confirmar, voltar])
+        .then(() => { if (!confirmar.disabled) perguntar(decisao); });
+    };
+    cartao.append(acoes, confirmacao);
     return cartao;
   }
 
